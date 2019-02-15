@@ -1,0 +1,391 @@
+/*
+ * Copyright 2010 Red Hat, Inc. and/or its affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.optaplanner.examples.conferencescheduling.solver;
+    dialect "java"
+
+import org.optaplanner.core.api.score.buildin.hardmediumsoft.HardMediumSoftScoreHolder;
+
+import org.optaplanner.examples.conferencescheduling.domain.ConferenceConstraintConfiguration;
+import org.optaplanner.examples.conferencescheduling.domain.Room;
+import org.optaplanner.examples.conferencescheduling.domain.Speaker;
+import org.optaplanner.examples.conferencescheduling.domain.Talk;
+import org.optaplanner.examples.conferencescheduling.domain.Timeslot;
+
+global HardMediumSoftScoreHolder scoreHolder;
+
+// ############################################################################
+// Hard constraints
+// ############################################################################
+
+// TODO Build-in hard constraint, remove it
+rule "Talk type of timeslot"
+    when
+        Talk(timeslot != null, !getTimeslot().getTalkTypeSet().contains(getTalkType()))
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+// TODO Build-in hard constraint, remove it
+rule "Talk type of room"
+    when
+        Talk(room != null, !getRoom().getTalkTypeSet().contains(getTalkType()))
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Room unavailable timeslot"
+    when
+        Talk(hasUnavailableRoom())
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Room conflict"
+    when
+        Talk(timeslot != null, $timeslot : timeslot,
+                room != null, $room : room,
+                $leftId : id)
+        Talk(timeslot != null, getTimeslot().overlaps($timeslot),
+                room == $room,
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Speaker unavailable timeslot"
+    when
+        Talk(hasAnyUnavailableSpeaker())
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Speaker conflict"
+    when
+        $speaker : Speaker()
+        Talk(hasSpeaker($speaker),
+                timeslot != null, $timeslot : timeslot,
+                $leftId : id)
+        Talk(hasSpeaker($speaker),
+                timeslot != null, getTimeslot().overlaps($timeslot),
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Speaker required timeslot tags"
+    when
+        Talk($count : missingSpeakerRequiredTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Speaker prohibited timeslot tags"
+    when
+        Talk($count : prevailingSpeakerProhibitedTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk required timeslot tags"
+    when
+        Talk($count : missingRequiredTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk prohibited timeslot tags"
+    when
+        Talk($count : prevailingProhibitedTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Speaker required room tags"
+    when
+        Talk($count : missingSpeakerRequiredRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Speaker prohibited room tags"
+    when
+        Talk($count : prevailingSpeakerProhibitedRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk required room tags"
+    when
+        Talk($count : missingRequiredRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk prohibited room tags"
+    when
+        Talk($count : prevailingProhibitedRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk prerequisite talks"
+    when
+        $talk : Talk(timeslot != null, getPrerequisiteTalkSet().size() > 0)
+        $count : Number(this > 0) from accumulate(
+            $prerequisiteTalk : Talk(timeslot != null,
+                    $talk.getPrerequisiteTalkSet().contains(this),
+                    !getTimeslot().endsBefore($talk.getTimeslot())),
+            count($prerequisiteTalk)
+        )
+    then
+        scoreHolder.penalize(kcontext, $count.intValue());
+end
+
+rule "Consecutive talks pause"
+    when
+        ConferenceConstraintConfiguration($minimumPause : minimumConsecutiveTalksPauseInMinutes)
+        $talk: Talk(timeslot != null, $id : id, $timeslot : getTimeslot())
+        Talk(timeslot != null, $id < id, hasMutualSpeaker($talk), !getTimeslot().pauseExists($timeslot, $minimumPause))
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+// ############################################################################
+// Medium constraints
+// ############################################################################
+
+rule "Talk mutually-exclusive-talks tags"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot, $leftId : id)
+        $rightTalk : Talk(timeslot != null,
+                overlappingMutuallyExclusiveTalksTagCount($leftTalk) > 0,
+                getTimeslot().overlaps($timeslot),
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Published timeslot"
+    when
+        Talk(publishedTimeslot != null, timeslot != publishedTimeslot)
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+// ############################################################################
+// Soft constraints
+// ############################################################################
+
+rule "Theme track conflict"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot,
+                $leftId : id)
+        $rightTalk : Talk(timeslot != null,
+                overlappingThemeTrackCount($leftTalk) > 0,
+                getTimeslot().overlaps($timeslot),
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext, $rightTalk.overlappingThemeTrackCount($leftTalk));
+end
+
+rule "Sector conflict"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot,
+                $leftId : id)
+        $rightTalk : Talk(timeslot != null,
+                overlappingSectorCount($leftTalk) > 0,
+                getTimeslot().overlaps($timeslot),
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext, $rightTalk.overlappingSectorCount($leftTalk));
+end
+
+rule "Audience type diversity"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot,
+                $leftId : id)
+        // Timeslot.overlaps() is deliberately not used
+        $rightTalk : Talk(timeslot == $timeslot,
+                overlappingAudienceTypeCount($leftTalk) > 0,
+                id > $leftId)
+    then
+        scoreHolder.reward(kcontext, $rightTalk.overlappingAudienceTypeCount($leftTalk));
+end
+
+rule "Audience type theme track conflict"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot,
+                $leftId : id)
+        $rightTalk : Talk(timeslot != null,
+                overlappingThemeTrackCount($leftTalk) > 0,
+                overlappingAudienceTypeCount($leftTalk) > 0,
+                getTimeslot().overlaps($timeslot),
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext, $rightTalk.overlappingThemeTrackCount($leftTalk)
+                * $rightTalk.overlappingAudienceTypeCount($leftTalk));
+end
+
+rule "Audience level diversity"
+    when
+        Talk(timeslot != null, $timeslot : timeslot,
+                $audienceLevel : audienceLevel,
+                $leftId : id)
+        // Timeslot.overlaps() is deliberately not used
+        Talk(timeslot == $timeslot,
+                audienceLevel != $audienceLevel,
+                id > $leftId)
+    then
+        scoreHolder.reward(kcontext);
+end
+
+rule "Audience level flow per content violation"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot,
+                $audienceLevel : audienceLevel)
+        $rightTalk : Talk(timeslot != null,
+                overlappingContentCount($leftTalk) > 0,
+                audienceLevel < $audienceLevel,
+                !timeslot.endsBefore($timeslot))
+    then
+        scoreHolder.penalize(kcontext, $rightTalk.overlappingContentCount($leftTalk));
+end
+
+rule "Content conflict"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot,
+                $leftId : id)
+        $rightTalk : Talk(timeslot != null,
+                overlappingContentCount($leftTalk) > 0,
+                getTimeslot().overlaps($timeslot),
+                id > $leftId)
+    then
+        scoreHolder.penalize(kcontext, $rightTalk.overlappingContentCount($leftTalk));
+end
+
+rule "Language diversity"
+    when
+        Talk(timeslot != null, $timeslot : timeslot,
+                $language : language,
+                $leftId : id)
+        // Timeslot.overlaps() is deliberately not used
+        Talk(timeslot == $timeslot,
+                language != $language,
+                id > $leftId)
+    then
+        scoreHolder.reward(kcontext);
+end
+
+rule "Speaker preferred timeslot tags"
+    when
+        Talk($count : missingSpeakerPreferredTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk preferred timeslot tags"
+    when
+        Talk($count : missingPreferredTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Speaker undesired timeslot tags"
+    when
+        Talk($count : prevailingSpeakerUndesiredTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk undesired timeslot tags"
+    when
+        Talk($count : prevailingUndesiredTimeslotTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Speaker preferred room tags"
+    when
+        Talk($count : missingSpeakerPreferredRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk preferred room tags"
+    when
+        Talk($count : missingPreferredRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Speaker undesired room tags"
+    when
+        Talk($count : prevailingSpeakerUndesiredRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Talk undesired room tags"
+    when
+        Talk($count : prevailingUndesiredRoomTagCount() > 0)
+    then
+        scoreHolder.penalize(kcontext, $count);
+end
+
+rule "Same day talks"
+    when
+        $leftTalk : Talk(timeslot != null, $timeslot : timeslot, $leftId : id)
+        $rightTalk :  Talk(timeslot != null, id > $leftId, !timeslot.isOnSameDayAs($timeslot),
+            overlappingContentCount($leftTalk) > 0 || overlappingThemeTrackCount($leftTalk) > 0)
+    then
+        scoreHolder.penalize(kcontext,
+            $rightTalk.overlappingThemeTrackCount($leftTalk) + $rightTalk.overlappingContentCount($leftTalk));
+end
+
+rule "Popular talks"
+    when
+        Talk(room != null, $leftRoom : room, $leftFavoriteCount : favoriteCount)
+        Talk(room != null, favoriteCount < $leftFavoriteCount, room.getCapacity() > $leftRoom.getCapacity)
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Crowd control"
+    when
+        $talk : Talk(timeslot != null, crowdControlRisk > 0)
+        $overlappingNonZeroCrowdControlRiskTalksCount : Number(this != 1) from accumulate(
+            $overlappingTalk : Talk(timeslot != null, crowdControlRisk > 0, timeslot.overlaps($talk.getTimeslot), id != $talk.getId()),
+            count($overlappingTalk)
+        )
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Published room"
+    when
+        Talk(publishedRoom != null, room != publishedRoom)
+    then
+        scoreHolder.penalize(kcontext);
+end
+
+rule "Room stability"
+    when
+        $talk : Talk(timeslot != null, $timeslot : timeslot, $room : room, $id : id)
+        Talk(timeslot != null, overlappingThemeTrackCount($talk) > 0, $id < id, timeslot.isOnSameDayAs($timeslot), $room != room)
+    then
+        scoreHolder.penalize(kcontext);
+end
