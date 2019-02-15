@@ -23,7 +23,6 @@ import org.optaplanner.examples.cloudbalancing.optional.domain.CloudComputerStre
 import org.optaplanner.examples.cloudbalancing.optional.domain.CloudProcessDifficultyComparator;
 import org.optaplanner.examples.common.domain.AbstractPersistable;
 
-@PlanningEntity(difficultyComparatorClass = CloudProcessDifficultyComparator.class)
 @XStreamAlias("CloudProcess")
 public class CloudProcess extends AbstractPersistable {
 
@@ -31,7 +30,6 @@ public class CloudProcess extends AbstractPersistable {
     private int requiredMemory; // in gigabyte RAM
     private int requiredNetworkBandwidth; // in gigabyte per hour
 
-    // Planning variables: changes during planning, between score calculations.
     private CloudComputer computer;
 
     public CloudProcess() {
@@ -68,8 +66,6 @@ public class CloudProcess extends AbstractPersistable {
         this.requiredNetworkBandwidth = requiredNetworkBandwidth;
     }
 
-    @PlanningVariable(valueRangeProviderRefs = {"computerRange"},
-            strengthComparatorClass = CloudComputerStrengthComparator.class)
     public CloudComputer getComputer() {
         return computer;
     }
