@@ -76,26 +76,64 @@ about any solution for which a computer has more than 4 computers (because it's 
 
 This code might trigger a http://docs.optaplanner.org/latest/optaplanner-docs/html_single/index.html#scoreTrap
 
-    rule "atMost4ProcessesPerComputer"
-    when
-        ...
-    then
-        scoreHolder.addHardConstraintMatch(kcontext, -1); // BAD: score trap
-    end
+```ruby
+rule "atMost4ProcessesPerComputer"
+when
+    ...
+then
+    scoreHolder.addHardConstraintMatch(kcontext, -1); // BAD: score trap
+end
+```
 
 #### Distribute network bandwidth fairly
 
-    rule "distributeNetworkBandwidthFairly"
-        when
-            $computer : CloudComputer()
-            accumulate(
-                CloudProcess(
-                    computer == $computer,
-                    $requiredNetworkBandwidth : requiredNetworkBandwidth);
-                $total : sum($requiredNetworkBandwidth)
-            )
-        then
-            scoreHolder.addSoftConstraintMatch(kcontext, - ($total * $total));
-    end
+```ruby
+rule "distributeNetworkBandwidthFairly"
+    when
+        $computer : CloudComputer()
+        accumulate(
+            CloudProcess(
+                computer == $computer,
+                $requiredNetworkBandwidth : requiredNetworkBandwidth);
+            $total : sum($requiredNetworkBandwidth)
+        )
+    then
+        scoreHolder.addSoftConstraintMatch(kcontext, - ($total * $total));
+end
+```
 
 ## lab03
+
+### Goal
+
+Practice the benchmark
+
+### Instruction
+
+Open: `lab03/src/main/resources/logback.xml`:
+
+- change level to `info`
+
+Work in lab03 project where you will find a clean project.
+Search the benchmark class: `CloudBalancingBenchmarkHelloWorld`.
+
+Open the benchmark configuration file used in the:
+`lab03/src/main/resources/org/optaplanner/examples/cloudbalancing/optional/benchmark/cloudBalancingBenchmarkConfig.xml`
+
+
+There are 4 sections:
+
+- `problemBenchmarks` data sets used for the benchmark
+- `solver` here it's possible to reduce the termination time
+- `solverBenchmark` 5 different solver configuration
+
+Run the benchmarker reducing the termination time to 2 minutes:
+
+- `(2 minutes * 3 configuration * 5 data sets) / parallel threads`, in a laptop with 4 cores, leads to 17 minutes of wait time
+
+To get a more predictable result, configure the number of thread to fixed value.
+Which is the property to set it up?
+
+Explore the report.
+
+Optionally, try the other configurations available.
