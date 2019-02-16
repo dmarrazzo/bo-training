@@ -56,17 +56,19 @@ Hints:
 
 #### No more than 4 processes per computer
 
-    rule "atMost4ProcessesPerComputer"
-        when
-        $computer : CloudComputer()
-        accumulate(
-            $c : CloudProcess(computer == $computer);
-            $count : count($c);
-            $count > 4
-        )
-        then
-            scoreHolder.addHardConstraintMatch(kcontext, 4 - $count.intValue());
-    end
+```js
+rule "atMost4ProcessesPerComputer"
+    when
+    $computer : CloudComputer()
+    accumulate(
+        $c : CloudProcess(computer == $computer);
+        $count : count($c);
+        $count > 4
+    )
+    then
+        scoreHolder.addHardConstraintMatch(kcontext, 4 - $count.intValue());
+end
+```
 
 #### Pitfalls
 
@@ -76,7 +78,7 @@ about any solution for which a computer has more than 4 computers (because it's 
 
 This code might trigger a http://docs.optaplanner.org/latest/optaplanner-docs/html_single/index.html#scoreTrap
 
-```ruby
+```js
 rule "atMost4ProcessesPerComputer"
 when
     ...
@@ -87,7 +89,7 @@ end
 
 #### Distribute network bandwidth fairly
 
-```ruby
+```js
 rule "distributeNetworkBandwidthFairly"
     when
         $computer : CloudComputer()
